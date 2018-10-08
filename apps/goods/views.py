@@ -5,6 +5,7 @@ from order.models import OrderGoods
 from django_redis import get_redis_connection
 from django.views.generic import View
 from django.core.cache import cache
+from django.core.paginator import Paginator  # 对数据进行分页
 # Create your views here.
 
 
@@ -96,3 +97,72 @@ class DetailView(View):
                    'sku': sku}
 
         return render(request, 'detail.html', context)
+
+
+# list/列表种类/页码
+# list/种类id/页码?sort=page
+class ListView(View):
+    def get(self, request, type_id, page):
+        # 判断种类是否存在
+        try:
+            type = GoodsType.objects.get(id=type_id)
+        except GoodsType.DoesNotExist:
+            return redirect(reverse('goods:index'))
+        sort = request.GET.get('sort')
+        # 获取商品的分类信息
+        types = GoodsType.objects.all()
+        # 根据不同的排序方式进行列表显示
+        # 按照价格排序
+        if sort == 'price':
+            skus = GoodsSKU.objects.filter(type=type).order_by('price')
+        # 按照销量排序
+        elif sort == 'hot':
+            skus = GoodsSKU.objects.filter(type=type).order_by('-sales')
+        else:
+            sort = 'default'
+            skus = GoodsSKU.objects.filter(type=type).order_by('-id')
+
+        # 对数据进行分页
+        paginator = Paginator(skus, 2)
+        # 获取第page页的内容
+        try:
+            page = int(page)
+        except Exception as e:
+            page = 1
+        if page > paginator.num_pages:
+            page = 1
+        # 获取当前page页的内容
+        skus_page = paginator.page(page)
+        # 页码控制，最多显示五页
+        # 总页数小于五页。显示全部页码
+        # 如果当前页式前三页显示1-5页
+        # 如果当前页式后三页显示最后五页
+        # 其他情况，显示当前页的前两页，当前页和后两页
+        num_pages = paginator.num_pages
+        if num_pages < 5:
+            pages = range(1, num_pages+1)
+        elif num_pages <= 3:
+            pages = range(1, 6)
+        elif num_pages - page <= 2:
+            pages = range(num_pages-4, num_pages+1)
+        else:
+            pages = range(page-2, page+3)
+        # 获取新品推荐
+        new_goods = GoodsSKU.objects.filter(type=type).order_by('-create_time')[:2]
+        # 获取用户购物车中商品的数目
+        user = request.user
+        cart_count = 0
+        if user.is_authenticated:
+            # 用户已登录
+            conn = get_redis_connection('default')
+            cart_key = 'cart_%d' % user.id
+            cart_count = conn.hlen(cart_key)
+        # 组织模板上下文
+        context = {'type': type, 'types': types,
+                   'skus': skus,
+                   'skus_page': skus_page,
+                   'sort': sort,
+                   'new_goods': new_goods,
+                   'cart_count': cart_count,
+                   'pages': pages}
+        return render(request, 'list.html', context)

@@ -17,7 +17,7 @@
 		</ul>
 		<div class="slide fl">
 			<ul class="slide_pics">
-                {% for banner in good_banners%}
+                {% for banner in goods_banners%}
 				<li><a href="{% url 'goods:detail' banner.sku.id %}"><img src="{{ banner.image.url }}" alt="幻灯片"></a></li>
                 {% endfor %}
 			</ul>
