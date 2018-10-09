@@ -9,6 +9,7 @@ from utils.mixin import LoginRequiredMixin  # 判断用户是否登录
 # 获取数据： 商品ID:sku_id, 商品数量:count
 # cart/add
 class CartAddView(View):
+    """购物车页面显示模块"""
     def post(self, request):
         user = request.user
         # 接受数据
@@ -52,7 +53,6 @@ class CartAddView(View):
         return JsonResponse({'ret': 5, 'total_count': total_count, 'message': '添加成功'})
 
 
-
 class CartInfoView(LoginRequiredMixin, View):
     """购物车模块"""
     def get(self, request):
@@ -88,3 +88,49 @@ class CartInfoView(LoginRequiredMixin, View):
                    'total_price': total_price}
         # 返回应答
         return render(request, 'cart.html', context)
+
+
+# 因为需要修改并且页面不需要刷新,故采用ajax post 方式
+# 需接受的两个参数:商品id和数目 sku_id count
+# cart/updata
+class CartUpdateView(View):
+    """购物车更新模块"""
+    def post(self, request):
+        user = request.user
+        # 接受数据
+        sku_id = request.POST.get('sku_id')
+        count = request.POST.get('count')
+        # 数据校验
+        # 校验是否登录状态
+        if not user.is_authenticated:
+            # 用户未登录
+            return JsonResponse({'ret': 0, 'errmsg': '用户未登录'})
+        # 校验数据是否完整
+        if not all([sku_id, count]):
+            # 数据不完整
+            return JsonResponse({'ret': 1, 'errmsg': '数据不完整'})
+        # 校验添加的商品数量
+        try:
+            count = int(count)
+        except Exception as e:
+            return JsonResponse({'ret': 2, 'errmsg': '商品数目错误'})
+        # 校验商品是否存在
+        try:
+            sku = GoodsSKU.objects.get(id=sku_id)
+        except GoodsSKU.DoesNotExist:
+            return JsonResponse({'ret': 3, 'errmsg': '商品不存在'})
+        # 更新数据
+        conn = get_redis_connection('default')
+        cart_key = 'cart_%d' % user.id
+        # 判断库存
+        if count > sku.stock:
+            return JsonResponse({'ret': 4, 'errmsg': '商品库存不足'})
+        # 进行更新
+        conn.hset(cart_key, sku_id, count)
+        # 获得商品的总件数
+        total_count = 0
+        vals = conn.hvals(cart_key)
+        for val in vals:
+            total_count += int(val)
+        # 上传
+        return JsonResponse({'ret': 5, 'total_count': total_count, 'message': '更新成功'})
