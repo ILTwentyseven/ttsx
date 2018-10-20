@@ -12,6 +12,6 @@ urlpatterns = [
     # path('order/', login_required(UserOrderView.as_view()), name='order'),  # 用户订单页面
     # path('site/', login_required(UserSiteView.as_view()), name='site'),  # 用户地址页面
     re_path(r'^$', UserInfoView.as_view(), name='info'),  # 用户信息页面
-    path('order/', UserOrderView.as_view(), name='order'),  # 用户订单页面
+    re_path(r'^order/(?P<page>\d+)$', UserOrderView.as_view(), name='order'),  # 用户订单页面
     path('site/', UserSiteView.as_view(), name='site'),  # 用户地址页面
 ]

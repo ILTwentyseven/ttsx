@@ -63,21 +63,21 @@
 
 		<div class="r_wrap fr clearfix">
 			<ul class="detail_tab clearfix">
-				<li class="active">商品介绍</li>
-				<li>评论</li>
+				<li id="tag_detail" class="active">商品介绍</li>
+				<li id="tag_comment">评论</li>
 			</ul>
 
-			<div class="tab_content">
+			<div id="tab_detail" class="tab_content">
 				<dl>
 					<dt>商品详情：</dt>
 					<dd>{{ sku.goods.detail|safe }}</dd>
 				</dl>
 			</div>
-            <div class="tab_content">
+            <div id="tab_comment" class="tab_content" style="display: none">
 				<dl>
                     {% for comment in order_comment %}
-					<dt>评论时间：{{ order.update_time }}&nbsp;&nbsp;用户名：{{ order.order.user.username }}</dt>
-					<dd>评论内容：{{ order.comment }}</dd>
+					<dt>评论时间：{{ comment.update_time }}&nbsp;&nbsp;用户名：{{ comment.order.user.username }}</dt>
+					<dd>评论内容：{{ comment.comment }}</dd>
                     {% endfor %}
 				</dl>
 			</div>
@@ -89,6 +89,18 @@
 {% block bottomfiles %}
 	<script type="text/javascript" src="{% static 'js/jquery-1.12.4.min.js' %}"></script>
 	<script type="text/javascript">
+        $('#tag_detail').click(function () {
+            $('#tag_comment').removeClass('active')
+            $(this).addClass("active")
+            $('#tab_comment').hide()
+            $('#tab_detail').show()
+        })
+        $('#tag_comment').click(function () {
+            $('#tag_detail').removeClass('active')
+            $(this).addClass("active")
+            $('#tab_detail').hide()
+            $('#tab_comment').show()
+        })
         // 调用函数
         update_goods_amount()
         // 计算商品总价格
@@ -149,7 +161,7 @@
 		var $to_x = $('#show_count').offset().top;
 		var $to_y = $('#show_count').offset().left;
 
-// name="csrfmiddlewaretoken" csrfmiddlewaretoken
+        // name="csrfmiddlewaretoken" csrfmiddlewaretoken
 		$('#add_cart').click(function(){
 			// 获取商品id和数量
             sku_id = $(this).attr('sku_id')

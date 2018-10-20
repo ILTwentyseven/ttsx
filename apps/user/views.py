@@ -2,8 +2,12 @@ from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.views.generic import View
 from django.contrib.auth import authenticate, login, logout
+from django.http import JsonResponse
+
 from user.models import User, Address
 from goods.models import GoodsSKU
+from order.models import OrderInfo, OrderGoods
+
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 from itsdangerous import SignatureExpired
 from django.conf import settings
@@ -12,6 +16,7 @@ from django.http import HttpResponse
 from django.core.mail import send_mail
 from celery_tasks.tasks import send_register_active_email
 from django_redis import get_redis_connection
+from django.core.paginator import Paginator
 import re
 # Create your views here.
 
@@ -105,7 +110,7 @@ class LoginView(View):
                 response = redirect(next_url)
                 remember = request.POST.get('remember')
                 if remember == 'on':
-                    response.set_cookie('username', username, max_age=7*24*3600)
+                    response.set_cookie('username', username.encode('utf8'), max_age=7*24*3600)
                 else:
                     response.delete_cookie('username')
                 return response
@@ -158,8 +163,99 @@ class UserInfoView(LoginRequiredMixin, View):
 # user/order
 class UserOrderView(LoginRequiredMixin, View):
     """用户订单界面"""
-    def get(self, request):
-        return render(request, 'user_center_order.html', {'page': 'order'})
+    def get(self, request, page):
+        #  获取用户登录信息
+        user = request.user
+        # 获取用户的订单信息
+        orders = OrderInfo.objects.filter(user=user).order_by('-create_time')
+        # 遍历获取到的订单信息
+        for order in orders:
+            # 根据order_id 获取商品的信息
+            order_skus = OrderGoods.objects.filter(order_id=order.order_id)
+            # 遍历order_skus 计算商品的小计
+            for order_sku in order_skus:
+                # 计算小计
+                amount = order_sku.price*order_sku.count
+                # 动态给order_sku增加属性amount 保存订单商品的小计
+                order_sku.amount = amount
+            # 动态给order增加属性 保存订单状态标题
+            order.status_name = OrderInfo.ORDER_STATUS[order.order_status]
+            # 动态给order增加属性 保存订单商品的信息
+            order.order_skus = order_skus
+        # 分页
+        paginator = Paginator(orders, 1)
+        # 获取第page页的内容
+        try:
+            page = int(page)
+        except Exception as e:
+            page = 1
+        if page > paginator.num_pages:
+            page = 1
+        # 获取当前page页的内容
+        order_page = paginator.page(page)
+        # 页码控制，最多显示五页
+        # 总页数小于五页。显示全部页码
+        # 如果当前页式前三页显示1-5页
+        # 如果当前页式后三页显示最后五页
+        # 其他情况，显示当前页的前两页，当前页和后两页
+        num_pages = paginator.num_pages
+        if num_pages < 5:
+            pages = range(1, num_pages + 1)
+        elif num_pages <= 3:
+            pages = range(1, 6)
+        elif num_pages - page <= 2:
+            pages = range(num_pages - 4, num_pages + 1)
+        else:
+            pages = range(page - 2, page + 3)
+
+        # 组织模板上下文
+        context = {'pages': pages,
+                   'order_page': order_page,
+                   'page': 'order'}
+
+        return render(request, 'user_center_order.html', context)
+
+    def post(self, request):
+        user = request.user
+        # 接受数据
+        sku_id = request.POST.get('sku_id')
+        count = request.POST.get('count')
+        # 数据校验
+        # 校验是否登录状态
+        if not user.is_authenticated:
+            # 用户未登录
+            return JsonResponse({'ret': 0, 'errmsg': '用户未登录'})
+        # 校验数据是否完整
+        if not all([sku_id, count]):
+            # 数据不完整
+            return JsonResponse({'ret': 1, 'errmsg': '数据不完整'})
+        # 校验添加的商品数量
+        try:
+            count = int(count)
+        except Exception as e:
+            return JsonResponse({'ret': 2, 'errmsg': '商品数目错误'})
+        # 校验商品是否存在
+        try:
+            sku = GoodsSKU.objects.get(id=sku_id)
+        except GoodsSKU.DoesNotExist:
+            return JsonResponse({'ret': 3, 'errmsg': '商品不存在'})
+        # 添加购物车记录
+        conn = get_redis_connection('default')
+        cart_key = 'cart_%d' % user.id
+        # 获取购物车中的值
+        cart_count = conn.hget(cart_key, sku_id)
+        # 判断接收的值
+        if cart_count:
+            count += int(cart_count)
+        # 判断库存
+        if count > sku.stock:
+            return JsonResponse({'ret': 4, 'errmsg': '商品库存不足'})
+        # 添加记录。使用哈希存储, 有数据则更新。无数据则添加
+        conn.hset(cart_key, sku_id, count)
+        # 计算购物车中的条目数
+        total_count = conn.hlen(cart_key)
+        # 返回应答
+        return JsonResponse({'ret': 5, 'total_count': total_count, 'message': '添加成功'})
 
 
 # user/site

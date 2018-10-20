@@ -23,9 +23,9 @@ sys.path.insert(0, os.path.join(BASE_DIR, 'apps'))
 SECRET_KEY = ')17&qjimshhze_x0w7&%shkumr$#(h1ne51-5hf%^n(m7d2w)&'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -130,6 +130,10 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+
+# 指定收集静态文件的路径
+STATIC_ROOT='/var/www/ttsx/static'
+
 TINYMCE_DEFAULT_CONFIG = {
     'theme': 'advanced',
     'width': 600,
